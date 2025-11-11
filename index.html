@@ -32,7 +32,35 @@
             color: #ffd700; /* Gold text */
             text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
             margin-top: 0;
+            margin-bottom: 10px;
         }
+
+        /* --- Player Status (Money & Bet) --- */
+        #player-status {
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            width: 90%;
+            margin: 10px auto;
+            background: rgba(0,0,0,0.2);
+            padding: 15px;
+            border-radius: 10px;
+            border: 2px solid #ffd700;
+        }
+        .status-box {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #fff;
+        }
+        #player-money {
+            color: #86ff86; /* Light green */
+            font-size: 1.75rem;
+        }
+        #current-bet {
+            color: #ffc900; /* Gold */
+            font-size: 1.75rem;
+        }
+
 
         /* --- Hand & Card Styles --- */
         .hand-container {
@@ -75,32 +103,12 @@
             border-color: #4a0000;
         }
         
-        .card .suit {
-            font-size: 2.5rem;
-            line-height: 1;
-        }
-        
-        .card.red {
-            color: #ff0000;
-        }
-
+        .card .suit { font-size: 2.5rem; line-height: 1; }
+        .card.red { color: #ff0000; }
         .card .rank-top { text-align: left; }
         .card .rank-bottom { text-align: right; transform: rotate(180deg); }
 
         /* --- Info & Controls --- */
-        #game-info {
-            display: flex;
-            justify-content: space-around;
-            align-items: center;
-            font-size: 1.5rem;
-            font-weight: bold;
-            margin-bottom: 15px;
-        }
-
-        #player-money {
-            color: #86ff86; /* Light green for money */
-        }
-
         #game-message {
             font-size: 1.25rem;
             font-weight: bold;
@@ -164,9 +172,13 @@
     <div id="game-board">
         <h1>Blackjack</h1>
 
-        <div id="game-info">
-            <span>Money: $<span id="player-money">1000</span></span>
-            <button id="btn-new-game">New Game</button>
+        <div id="player-status">
+            <div class="status-box">
+                Money: $<span id="player-money">1000</span>
+            </div>
+            <div class="status-box">
+                Current Bet: $<span id="current-bet">0</span>
+            </div>
         </div>
 
         <div id="dealer-area">
@@ -185,6 +197,7 @@
             <label for="bet-amount">Bet:</label>
             <input type="number" id="bet-amount" value="50" min="1">
             <button id="btn-bet">Place Bet</button>
+            <button id="btn-new-game">New Game</button>
         </div>
 
         <div id="play-controls" class="controls hidden">
@@ -207,6 +220,7 @@
         const btnStand = document.getElementById('btn-stand');
         
         const playerMoneyEl = document.getElementById('player-money');
+        const currentBetEl = document.getElementById('current-bet');
         const betAmountEl = document.getElementById('bet-amount');
         const betControls = document.getElementById('bet-controls');
         const playControls = document.getElementById('play-controls');
@@ -262,14 +276,17 @@
             dealerHandEl.innerHTML = '';
             playerScoreEl.textContent = '0';
             dealerScoreEl.textContent = '0';
+            currentBetEl.textContent = '0';
             
             updateMoneyDisplay();
             betAmountEl.max = playerMoney; // Update max bet
             
             // Check for Game Over
             if (playerMoney <= 0) {
-                gameMessageEl.textContent = 'Game Over! Press New Game to play again.';
-                betControls.classList.add('hidden');
+                gameMessageEl.textContent = 'Game Over! Press "New Game" to play again.';
+                betControls.classList.remove('hidden'); // Show controls so they can hit "New Game"
+                btnBet.disabled = true;
+                betAmountEl.disabled = true;
                 playControls.classList.add('hidden');
             } else {
                 gameMessageEl.textContent = 'Place your bet.';
@@ -300,6 +317,7 @@
             currentBet = bet;
             playerMoney -= currentBet;
             updateMoneyDisplay();
+            currentBetEl.textContent = currentBet;
             gameMessageEl.textContent = '';
             
             // Toggle controls
@@ -322,10 +340,6 @@
             // Reset hands and scores
             playerHand = [dealCard(), dealCard()];
             dealerHand = [dealCard(), dealCard()];
-            playerScore = 0;
-            dealerScore = 0;
-            playerAces = 0;
-            dealerAces = 0;
             
             // Render initial hands (dealer's 1st card hidden)
             renderInitialHands();
@@ -406,7 +420,8 @@
             dealerHandEl.appendChild(createCardElement(dealerHand[1], false)); 
             
             // Only show the score of the visible card
-            dealerScoreEl.textContent = dealerHand[1].value;
+            let visibleDealerScore = dealerHand[1].rank === 'A' ? 11 : dealerHand[1].value;
+            dealerScoreEl.textContent = visibleDealerScore;
         }
 
         /**
@@ -497,21 +512,25 @@
 
             revealDealerHand();
             
-            // Dealer hits until score is 17 or higher
-            while (dealerScore < 17) {
-                dealerHand.push(dealCard());
-                dealerHandEl.appendChild(createCardElement(dealerHand[dealerHand.length - 1], false));
-                [dealerScore, dealerAces] = calculateScore(dealerHand);
-                dealerScoreEl.textContent = dealerScore;
-            }
-
-            determineWinner();
+            // Use setTimeout to create a delay for dealer hits, making it feel more natural
+            let dealerInterval = setInterval(() => {
+                if (dealerScore < 17) {
+                    dealerHand.push(dealCard());
+                    dealerHandEl.appendChild(createCardElement(dealerHand[dealerHand.length - 1], false));
+                    [dealerScore, dealerAces] = calculateScore(dealerHand);
+                    dealerScoreEl.textContent = dealerScore;
+                } else {
+                    clearInterval(dealerInterval);
+                    determineWinner();
+                }
+            }, 800); // 800ms delay for each dealer card
         }
 
         /**
          * Compares scores and declares a winner
          */
         function determineWinner() {
+            // Determine result
             if (playerScore > 21) {
                 // Player already busted, message set in playerHit()
             } else if (dealerScore > 21) {
