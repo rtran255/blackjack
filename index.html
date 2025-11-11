@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Blackjack</title>
+    <style>
+        /* --- Basic Styles --- */
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #0f3d0f; /* Dark green table color */
+            color: #ffffff;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+
+        #game-board {
+            width: 90%;
+            max-width: 800px;
+            background-color: #0c5c0c;
+            border: 10px solid #8b4513; /* Wood border */
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            text-align: center;
+        }
+
+        h1 {
+            color: #ffd700; /* Gold text */
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+        }
+
+        /* --- Hand & Card Styles --- */
+        .hand-container {
+            min-height: 150px;
+            margin: 20px 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .card {
+            background-color: #ffffff;
+            color: #000000;
+            width: 80px;
+            height: 120px;
+            border-radius: 8px;
+            border: 1px solid #aaa;
+            box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.2);
+            margin: 5px;
+            padding: 10px;
+            box-sizing: border-box;
+            font-size: 1.5rem;
+            font-weight: bold;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            position: relative;
+        }
+
+        .card.hidden {
+            background-image: repeating-linear-gradient(
+                45deg,
+                #6d0000,
+                #6d0000 10px,
+                #8b0000 10px,
+                #8b0000 20px
+            );
+            color: transparent;
+            border-color: #4a0000;
+        }
+        
+        .card .suit {
+            font-size: 2.5rem;
+            line-height: 1;
+        }
+        
+        /* Color for red suits */
+        .card.red {
+            color: #ff0000;
+        }
+
+        .card .rank-top {
+            text-align: left;
+        }
+
+        .card .rank-bottom {
+            text-align: right;
+            transform: rotate(180deg);
+        }
+
+        /* --- Info & Controls --- */
+        .info {
+            font-size: 1.25rem;
+            margin-bottom: 15px;
+        }
+
+        #game-message {
+            font-size: 1.5rem;
+            font-weight: bold;
+            min-height: 2.2rem;
+            margin: 15px 0;
+            color: #ffd700;
+        }
+
+        #controls {
+            margin-top: 20px;
+        }
+
+        button {
+            font-size: 1rem;
+            font-weight: bold;
+            padding: 12px 20px;
+            margin: 5px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            background-color: #ffd700;
+            color: #333;
+            transition: background-color 0.2s, transform 0.2s;
+        }
+
+        button:hover:not(:disabled) {
+            background-color: #ffec80;
+            transform: translateY(-2px);
+        }
+
+        button:disabled {
+            background-color: #555;
+            color: #999;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-board">
+        <h1>Blackjack</h1>
+
+        <div id="dealer-area">
+            <h2>Dealer's Hand (<span id="dealer-score">0</span>)</h2>
+            <div id="dealer-hand" class="hand-container">
+                </div>
+        </div>
+
+        <div id="player-area">
+            <h2>Your Hand (<span id="player-score">0</span>)</h2>
+            <div id="player-hand" class="hand-container">
+                </div>
+        </div>
+
+        <div id="game-message">Welcome! Press "New Game" to start.</div>
+        
+        <div id="controls">
+            <button id="btn-new-game">New Game</button>
+            <button id="btn-hit" disabled>Hit</button>
+            <button id="btn-stand" disabled>Stand</button>
+        </div>
+    </div>
+
+    <script>
+        // --- DOM Elements ---
+        const dealerScoreEl = document.getElementById('dealer-score');
+        const playerScoreEl = document.getElementById('player-score');
+        const dealerHandEl = document.getElementById('dealer-hand');
+        const playerHandEl = document.getElementById('player-hand');
+        const gameMessageEl = document.getElementById('game-message');
+        const btnNewGame = document.getElementById('btn-new-game');
+        const btnHit = document.getElementById('btn-hit');
+        const btnStand = document.getElementById('btn-stand');
+
+        // --- Game Variables ---
+        let deck = [];
+        let playerHand = [];
+        let dealerHand = [];
+        let playerScore = 0;
+        let dealerScore = 0;
+        let playerAces = 0;
+        let dealerAces = 0;
+        let gameInProgress = false;
+
+        // --- Suit & Rank Definitions ---
+        const suits = ['Hearts', 'Diamonds', 'Clubs', 'Spades'];
+        const ranks = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
+        const suitSymbols = { 'Hearts': '♥', 'Diamonds': '♦', 'Clubs': '♣', 'Spades': '♠' };
+
+        // --- Event Listeners ---
+        btnNewGame.addEventListener('click', startGame);
+        btnHit.addEventListener('click', playerHit);
+        btnStand.addEventListener('click', playerStand);
+
+        // --- Game Logic Functions ---
+
+        /**
+         * Creates a standard 52-card deck
+         */
+        function createDeck() {
+            deck = [];
+            for (const suit of suits) {
+                for (const rank of ranks) {
+                    let value = parseInt(rank);
+                    if (['J', 'Q', 'K'].includes(rank)) {
+                        value = 10;
+                    } else if (rank === 'A') {
+                        value = 11; // 'A' is 11 by default, adjusted later if needed
+                    }
+                    deck.push({ suit, rank, value });
+                }
+            }
+        }
+
+        /**
+         * Shuffles the deck using Fisher-Yates algorithm
+         */
+        function shuffleDeck() {
+            for (let i = deck.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [deck[i], deck[j]] = [deck[j], deck[i]]; // Swap
+            }
+        }
+
+        /**
+         * Deals a single card from the deck
+         */
+        function dealCard() {
+            return deck.pop();
+        }
+
+        /**
+         * Starts a new game
+         */
+        function startGame() {
+            gameInProgress = true;
+            createDeck();
+            shuffleDeck();
+
+            // Reset hands and scores
+            playerHand = [dealCard(), dealCard()];
+            dealerHand = [dealCard(), dealCard()];
+            playerScore = 0;
+            dealerScore = 0;
+            playerAces = 0;
+            dealerAces = 0;
+
+            // Update UI and controls
+            gameMessageEl.textContent = '';
+            btnHit.disabled = false;
+            btnStand.disabled = false;
+
+            renderGame();
+
+            // Check for initial Blackjack
+            if (playerScore === 21) {
+                gameMessageEl.textContent = 'Blackjack! You win!';
+                endGame();
+            }
+        }
+        
+        /**
+         * Renders the current state of the game (hands and scores)
+         */
+        function renderGame() {
+            // Clear hands
+            playerHandEl.innerHTML = '';
+            dealerHandEl.innerHTML = '';
+
+            // Calculate scores
+            [playerScore, playerAces] = calculateScore(playerHand);
+            [dealerScore, dealerAces] = calculateScore(dealerHand);
+
+            // Render Player Hand
+            playerHand.forEach(card => {
+                playerHandEl.appendChild(createCardElement(card, false));
+            });
+            playerScoreEl.textContent = playerScore;
+
+            // Render Dealer Hand
+            // Show only the second card; the first is hidden
+            dealerHandEl.appendChild(createCardElement(dealerHand[0], true)); // Hidden card
+            dealerHandEl.appendChild(createCardElement(dealerHand[1], false)); // Visible card
+            
+            // Only show the score of the visible card
+            dealerScoreEl.textContent = dealerHand[1].value;
+        }
+
+        /**
+         * Creates an HTML element for a card
+         * @param {object} card - The card object { suit, rank, value }
+         * @param {boolean} isHidden - Whether the card should be face down
+         */
+        function createCardElement(card, isHidden) {
+            const cardEl = document.createElement('div');
+            cardEl.classList.add('card');
+            
+            if (isHidden) {
+                cardEl.classList.add('hidden');
+            } else {
+                const suit = suitSymbols[card.suit];
+                const isRed = card.suit === 'Hearts' || card.suit === 'Diamonds';
+                if (isRed) {
+                    cardEl.classList.add('red');
+                }
+
+                cardEl.innerHTML = `
+                    <div class="rank-top">${card.rank}</div>
+                    <div class="suit">${suit}</div>
+                    <div class="rank-bottom">${card.rank}</div>
+                `;
+            }
+            return cardEl;
+        }
+
+        /**
+         * Calculates the score of a given hand, adjusting for Aces
+         * @param {Array} hand - An array of card objects
+         * @returns {Array} [score, aceCount]
+         */
+        function calculateScore(hand) {
+            let score = 0;
+            let aceCount = 0;
+
+            for (const card of hand) {
+                score += card.value;
+                if (card.rank === 'A') {
+                    aceCount++;
+                }
+            }
+
+            // Adjust for Aces: if score is over 21, change Ace value from 11 to 1
+            while (score > 21 && aceCount > 0) {
+                score -= 10;
+                aceCount--;
+            }
+            return [score, aceCount];
+        }
+
+        /**
+         * Handles the player's "Hit" action
+         */
+        function playerHit() {
+            if (!gameInProgress) return;
+
+            playerHand.push(dealCard());
+            [playerScore, playerAces] = calculateScore(playerHand);
+
+            // Re-render player's hand
+            playerHandEl.innerHTML = '';
+            playerHand.forEach(card => {
+                playerHandEl.appendChild(createCardElement(card, false));
+            });
+            playerScoreEl.textContent = playerScore;
+
+            // Check for bust
+            if (playerScore > 21) {
+                gameMessageEl.textContent = 'Bust! You lose.';
+                endGame();
+            }
+        }
+
+        /**
+         * Handles the player's "Stand" action
+         */
+        function playerStand() {
+            if (!gameInProgress) return;
+
+            gameInProgress = false; // Player's turn is over
+            btnHit.disabled = true;
+            btnStand.disabled = true;
+
+            // Reveal dealer's hidden card and true score
+            dealerHandEl.innerHTML = '';
+            dealerHand.forEach(card => {
+                dealerHandEl.appendChild(createCardElement(card, false));
+            });
+            [dealerScore, dealerAces] = calculateScore(dealerHand);
+            dealerScoreEl.textContent = dealerScore;
+
+            // Dealer hits until score is 17 or higher
+            dealerTurn();
+        }
+        
+        /**
+         * Logic for the dealer's turn
+         */
+        function dealerTurn() {
+            while (dealerScore < 17) {
+                dealerHand.push(dealCard());
+                [dealerScore, dealerAces] = calculateScore(dealerHand);
+            }
+
+            // Re-render dealer's hand after all hits
+            dealerHandEl.innerHTML = '';
+            dealerHand.forEach(card => {
+                dealerHandEl.appendChild(createCardElement(card, false));
+            });
+            dealerScoreEl.textContent = dealerScore;
+
+            // Determine the winner
+            determineWinner();
+        }
+
+        /**
+         * Compares scores and declares a winner
+         */
+        function determineWinner() {
+            if (dealerScore > 21) {
+                gameMessageEl.textContent = 'Dealer busts! You win!';
+            } else if (playerScore > dealerScore) {
+                gameMessageEl.textContent = 'You win!';
+            } else if (dealerScore > playerScore) {
+                gameMessageEl.textContent = 'You lose!';
+            } else {
+                gameMessageEl.textContent = 'Push (Tie)!';
+            }
+            // Game is already over, controls are disabled in playerStand()
+        }
+        
+        /**
+         * Disables "Hit" and "Stand" buttons at the end of a round
+         */
+        function endGame() {
+            gameInProgress = false;
+            btnHit.disabled = true;
+            btnStand.disabled = true;
+        }
+
+    </script>
+</body>
+</html>
